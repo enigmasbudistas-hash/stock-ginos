@@ -187,13 +187,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;backg
       <button class="tab" id="tab-ped">Pedido</button>
       <button class="tab" id="tab-prod">Productos</button>
       <button class="tab" id="tab-hist">Historial</button>
-      <button class="tab" id="tab-calc">PAR</button>
+      <button class="tab" id="tab-hpar">PARs</button>
+      <button class="tab" id="tab-calc">Calcular</button>
     </div>
   </div>
   <div class="view active" id="view-inv"></div>
   <div class="view" id="view-ped"></div>
   <div class="view" id="view-prod"></div>
   <div class="view" id="view-hist"></div>
+  <div class="view" id="view-hpar"></div>
   <div class="view" id="view-calc"></div>
   <div id="mwrap" style="display:none"></div>
 </div>
@@ -219,6 +221,7 @@ var DEFAULTS=[
  
 var prods, fase, modo;
 var historial=[];
+var historialPar=[];
 function loadAll(){
   try{ prods=JSON.parse(localStorage.getItem('gp')||'null')||DEFAULTS.map(function(d){return{nombre:d.n,unidad:d.u,exi:null,par:0,parAnt:0};}); }
   catch(e){ prods=DEFAULTS.map(function(d){return{nombre:d.n,unidad:d.u,exi:null,par:0,parAnt:0};}); }
@@ -226,8 +229,11 @@ function loadAll(){
   catch(e){ fase='inicio'; modo=null; }
   try{ historial=JSON.parse(localStorage.getItem('ghist')||'[]'); }
   catch(e){ historial=[]; }
+  try{ historialPar=JSON.parse(localStorage.getItem('ghpar')||'[]'); }
+  catch(e){ historialPar=[]; }
 }
 function saveHist(){ try{localStorage.setItem('ghist',JSON.stringify(historial));}catch(e){} }
+function saveHistPar(){ try{localStorage.setItem('ghpar',JSON.stringify(historialPar));}catch(e){} }
 function saveP(){ try{localStorage.setItem('gp',JSON.stringify(prods));}catch(e){} }
 function saveSt(){ try{localStorage.setItem('gst',JSON.stringify({fase:fase,modo:modo}));}catch(e){} }
 function saveAll(){ saveP(); saveSt(); }
@@ -240,19 +246,21 @@ function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.cl
  
 // ── TABS ──
 function showTab(t){
-  ['inv','ped','prod','hist','calc'].forEach(function(id){
+  ['inv','ped','prod','hist','hpar','calc'].forEach(function(id){
     document.getElementById('view-'+id).classList.toggle('active',id===t);
     document.getElementById('tab-'+id).classList.toggle('active',id===t);
   });
   if(t==='ped') renderPed();
   if(t==='prod') renderProd();
   if(t==='hist') renderHist();
+  if(t==='hpar') renderHistPar();
   if(t==='calc') renderCalc();
 }
 document.getElementById('tab-inv').addEventListener('click',function(){showTab('inv');});
 document.getElementById('tab-ped').addEventListener('click',function(){showTab('ped');});
 document.getElementById('tab-prod').addEventListener('click',function(){showTab('prod');});
 document.getElementById('tab-hist').addEventListener('click',function(){showTab('hist');});
+document.getElementById('tab-hpar').addEventListener('click',function(){showTab('hpar');});
 document.getElementById('tab-calc').addEventListener('click',function(){showTab('calc');});
  
 // ── HELPERS ──
@@ -631,24 +639,43 @@ function abrirPreview(){
 }
 function cerrarModal(){el('mwrap').style.display='none';el('mwrap').innerHTML='';}
 function cerrarSemana(){
-  // Save to historial before closing
   var tp=prods.filter(function(p){return ped(p)>0&&p.exi!==null;});
+  var fechaHoy=new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var semanaNum=wk();
+  var modoLabel=modo==='nuevo'?'PAR nuevo':'PAR anterior';
+ 
+  // Save pedido to historial
   if(tp.length>0){
     var entrada={
       id: Date.now(),
-      fecha: new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),
-      semana: wk(),
-      modo: modo==='nuevo'?'PAR nuevo':'PAR anterior',
+      fecha: fechaHoy,
+      semana: semanaNum,
+      modo: modoLabel,
       total: tp.length,
       urgentes: tp.filter(function(p){return sta(p)==='c';}).length,
       items: tp.map(function(p){return{nombre:p.nombre,unidad:p.unidad,exi:p.exi,par:p.par,cantidad:ped(p),estado:sta(p)};})
     };
-    historial.unshift(entrada); // newest first
-    if(historial.length>45) historial=historial.slice(0,45); // max 45
+    historial.unshift(entrada);
+    if(historial.length>45) historial=historial.slice(0,45);
     saveHist();
   }
+ 
+  // Save PARs snapshot to historial PAR
+  var parSnap={
+    id: Date.now()+1,
+    fecha: fechaHoy,
+    semana: semanaNum,
+    modo: modoLabel,
+    pars: prods.filter(function(p){return p.par>0;}).map(function(p){
+      return {nombre:p.nombre,unidad:p.unidad,par:p.par};
+    })
+  };
+  historialPar.unshift(parSnap);
+  if(historialPar.length>45) historialPar=historialPar.slice(0,45);
+  saveHistPar();
+ 
   prods.forEach(function(p){p.exi=null;p.parAnt=p.par||0;});
-  fase='inicio';modo=null;saveAll();cerrarModal();showTab('inv');renderInicio();toast('Semana cerrada y pedido guardado!');
+  fase='inicio';modo=null;saveAll();cerrarModal();showTab('inv');renderInicio();toast('Semana cerrada y guardada!');
 }
  
 // ── PDF ──
@@ -771,6 +798,77 @@ function showDelHistConfirm(hi){
   }
   conf.querySelector('#hconf-si').addEventListener('click',doDelete);
   conf.querySelector('#hconf-si').addEventListener('touchend',doDelete);
+}
+ 
+// ── HISTORIAL PAR ──
+function renderHistPar(){
+  var vh=el('view-hpar');
+  if(!historialPar.length){
+    vh.innerHTML='<div class="hempty"><div style="font-size:36px;margin-bottom:12px">📊</div>'
+      +'<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Sin historial de PARs</div>'
+      +'<div style="font-size:13px">Los PARs usados cada semana se guardarán aquí automáticamente al cerrar la semana.</div></div>';
+    return;
+  }
+  var html='<div class="slbl" style="margin-bottom:8px">'+historialPar.length+' semanas guardadas</div>';
+  historialPar.forEach(function(h,hi){
+    html+='<div class="hitem">'
+      +'<div class="hitem-head" id="hph-'+hi+'">'
+      +'<div style="flex:1">'
+      +'<div class="hitem-date">Semana '+h.semana+' — '+h.modo+'</div>'
+      +'<div class="hitem-sub">'+h.fecha+'</div>'
+      +'<div class="hitem-badges"><span class="pbg brg">'+h.pars.length+' productos</span></div>'
+      +'</div>'
+      +'<button class="hdel" id="hpdel-'+hi+'">🗑</button>'
+      +'</div>'
+      +'<div class="hitem-body" id="hpb-'+hi+'">'
+      +'<table class="prod-calc-table"><thead>'
+      +'<tr><th>Producto</th><th style="text-align:right">PAR usado</th></tr>'
+      +'</thead><tbody>'
+      +h.pars.map(function(p){
+        return '<tr><td>'+p.nombre+'<br><span style="font-size:10px;color:var(--text2)">'+p.unidad+'</span></td>'
+          +'<td style="text-align:right;font-weight:700;color:var(--blue)">'+p.par+'</td></tr>';
+      }).join('')
+      +'</tbody></table>'
+      +'</div></div>';
+  });
+  vh.innerHTML=html;
+ 
+  historialPar.forEach(function(h,hi){
+    var head=el('hph-'+hi);
+    var body=el('hpb-'+hi);
+    if(head) head.addEventListener('click',function(e){
+      if(e.target.closest('.hdel')) return;
+      body.classList.toggle('open');
+    });
+    var del=el('hpdel-'+hi);
+    if(del){
+      del.addEventListener('click',function(e){
+        e.stopPropagation();
+        showDelHistParConfirm(hi);
+      });
+    }
+  });
+}
+ 
+function showDelHistParConfirm(hi){
+  var h=historialPar[hi];
+  var item=el('hph-'+hi);
+  if(!item) return;
+  var wrap=item.closest('.hitem');
+  if(!wrap) return;
+  var conf=document.createElement('div');
+  conf.className='piconfirm';
+  conf.style.marginBottom='8px';
+  conf.innerHTML='<div class="piconfirm-txt">Borrar PARs<br><b>Semana '+h.semana+' — '+h.fecha+'</b>?</div>'
+    +'<div class="piconfirm-btns">'
+    +'<button class="pbtn-no" id="hpno">Cancelar</button>'
+    +'<button class="pbtn-si" id="hpsi">Borrar</button>'
+    +'</div>';
+  wrap.replaceWith(conf);
+  conf.querySelector('#hpno').addEventListener('click',function(){ renderHistPar(); });
+  function doDel(e){ if(e) e.preventDefault(); historialPar.splice(hi,1); saveHistPar(); toast('Borrado'); renderHistPar(); }
+  conf.querySelector('#hpsi').addEventListener('click',doDel);
+  conf.querySelector('#hpsi').addEventListener('touchend',doDel);
 }
  
 // ── CALCULADORA PAR ──
