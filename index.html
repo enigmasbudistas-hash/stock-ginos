@@ -145,6 +145,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;backg
 .hdel{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:2px 4px;flex-shrink:0;touch-action:manipulation;line-height:1;}
 .hdel:active{color:var(--red);}
 .hempty{text-align:center;padding:40px 20px;color:var(--text2);}
+/* calc */
+.calc-section{background:var(--card);border-radius:var(--r);border:0.5px solid var(--border);padding:14px;margin-bottom:10px;}
+.calc-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.calc-desc{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px;}
+.calc-field{margin-bottom:10px;}
+.calc-label{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;}
+.calc-input{padding:10px 12px;border:0.5px solid var(--border);border-radius:var(--r2);font-size:16px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;width:100%;font-weight:600;}
+.calc-input:focus{border-color:var(--blue);}
+.calc-input-euro{position:relative;}
+.calc-input-euro::before{content:"€";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text2);font-weight:600;}
+.calc-input-euro input{padding-left:28px;}
+.resultado-box{background:var(--blue-bg);border:1.5px solid var(--blue);border-radius:var(--r);padding:14px;margin-bottom:8px;}
+.resultado-titulo{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.resultado-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.resultado-item{background:var(--card);border-radius:var(--r2);padding:10px;}
+.resultado-num{font-size:22px;font-weight:800;color:var(--blue);}
+.resultado-lbl{font-size:11px;color:var(--text2);margin-top:2px;}
+.resultado-factor{font-size:12px;color:var(--blue);margin-top:6px;line-height:1.5;}
+.prod-calc-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;}
+.prod-calc-table th{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;padding:5px 4px;border-bottom:0.5px solid var(--border);text-align:left;}
+.prod-calc-table td{padding:7px 4px;border-bottom:0.5px solid var(--border);color:var(--text);vertical-align:middle;}
+.prod-calc-table tr:last-child td{border-bottom:none;}
+.prod-calc-table td:last-child{text-align:right;font-weight:700;color:var(--blue);}
+.par-nuevo-badge{display:inline-block;background:var(--green-bg);color:var(--green);font-size:10px;font-weight:700;padding:1px 6px;border-radius:var(--r2);margin-left:4px;}
+.par-igual-badge{display:inline-block;background:var(--bg);color:var(--text3);font-size:10px;font-weight:700;padding:1px 6px;border-radius:var(--r2);margin-left:4px;}
+.par-up{color:var(--green);font-weight:800;}
+.par-down{color:var(--red);font-weight:800;}
+.warn-calc{background:var(--orange-bg);color:#5C3407;border-radius:var(--r2);padding:8px 12px;font-size:12px;line-height:1.4;margin-bottom:8px;}
 /* toast */
 .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:11px 22px;border-radius:var(--r);font-size:14px;font-weight:600;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
 .toast.show{opacity:1;}
@@ -159,12 +187,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;backg
       <button class="tab" id="tab-ped">Pedido</button>
       <button class="tab" id="tab-prod">Productos</button>
       <button class="tab" id="tab-hist">Historial</button>
+      <button class="tab" id="tab-calc">PAR</button>
     </div>
   </div>
   <div class="view active" id="view-inv"></div>
   <div class="view" id="view-ped"></div>
   <div class="view" id="view-prod"></div>
   <div class="view" id="view-hist"></div>
+  <div class="view" id="view-calc"></div>
   <div id="mwrap" style="display:none"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -210,18 +240,20 @@ function toast(m){ var t=document.getElementById('toast'); t.textContent=m; t.cl
  
 // ── TABS ──
 function showTab(t){
-  ['inv','ped','prod','hist'].forEach(function(id){
+  ['inv','ped','prod','hist','calc'].forEach(function(id){
     document.getElementById('view-'+id).classList.toggle('active',id===t);
     document.getElementById('tab-'+id).classList.toggle('active',id===t);
   });
   if(t==='ped') renderPed();
   if(t==='prod') renderProd();
   if(t==='hist') renderHist();
+  if(t==='calc') renderCalc();
 }
 document.getElementById('tab-inv').addEventListener('click',function(){showTab('inv');});
 document.getElementById('tab-ped').addEventListener('click',function(){showTab('ped');});
 document.getElementById('tab-prod').addEventListener('click',function(){showTab('prod');});
 document.getElementById('tab-hist').addEventListener('click',function(){showTab('hist');});
+document.getElementById('tab-calc').addEventListener('click',function(){showTab('calc');});
  
 // ── HELPERS ──
 function el(id){ return document.getElementById(id); }
@@ -739,6 +771,184 @@ function showDelHistConfirm(hi){
   }
   conf.querySelector('#hconf-si').addEventListener('click',doDelete);
   conf.querySelector('#hconf-si').addEventListener('touchend',doDelete);
+}
+ 
+// ── CALCULADORA PAR ──
+// calcPars stores {nombre, unidad, par} for calc reference
+var calcPars = [];
+var calcStep = 1; // 1=intro ventas, 2=intro PARs producto a producto, 3=resultado
+ 
+function renderCalc(){
+  var saved = null;
+  try{ saved=JSON.parse(localStorage.getItem('gcalc')||'null'); }catch(e){}
+  if(saved){ calcPars=saved.pars||[]; }
+ 
+  var vc=el('view-calc');
+  var hasParsGuardados = calcPars.length>0;
+ 
+  vc.innerHTML=
+    '<div class="stitle">Calculadora PAR ideal</div>'
+    +'<div class="ssub">Introduce el PAR de referencia de tus productos, la venta para la que está calculado y la venta objetivo para obtener el PAR ideal.</div>'
+ 
+    +'<div class="calc-section">'
+    +'<div class="calc-title">📊 Ventas de referencia</div>'
+    +'<div class="calc-field"><div class="calc-label">Venta semanal base (€) — para la que tienes el PAR actual</div>'
+    +'<div class="calc-input-euro"><input class="calc-input" id="c-vbase" type="number" min="0" inputmode="decimal" placeholder="ej. 8000"></div></div>'
+    +'<div class="calc-field"><div class="calc-label">Venta semanal objetivo (€)</div>'
+    +'<div class="calc-input-euro"><input class="calc-input" id="c-vobj" type="number" min="0" inputmode="decimal" placeholder="ej. 10000"></div></div>'
+    +'</div>'
+ 
+    +'<div class="calc-section">'
+    +'<div class="calc-title">📦 PAR de referencia por producto</div>'
+    +'<div class="calc-desc">Introduce el PAR actual de cada producto (el que usas para la venta base indicada arriba).</div>'
+    +(hasParsGuardados?'<div class="warn-calc" style="background:var(--green-bg);color:var(--green);border-color:var(--green)">✓ Tienes '+calcPars.length+' productos con PAR guardado. Puedes recalcular o modificarlos.</div>':'')
+    +'<div id="calc-par-list"></div>'
+    +'<button class="btn btn-w" id="btn-cargar-pars" style="margin-top:4px">📋 Cargar PARs desde el inventario actual</button>'
+    +'</div>'
+ 
+    +'<button class="btn btn-b" id="btn-calcular">Calcular PAR ideal ▶</button>'
+    +'<div id="calc-resultado"></div>'
+    +'<div style="height:16px"></div>';
+ 
+  renderCalcParList();
+ 
+  el('btn-cargar-pars').addEventListener('click', function(){
+    calcPars = prods.filter(function(p){return p.par>0;}).map(function(p){
+      return {nombre:p.nombre, unidad:p.unidad, par:p.par};
+    });
+    saveCalcPars();
+    renderCalcParList();
+    toast('PARs cargados desde inventario');
+  });
+ 
+  el('btn-calcular').addEventListener('click', calcularPAR);
+}
+ 
+function renderCalcParList(){
+  var list = el('calc-par-list');
+  if(!list) return;
+ 
+  if(!calcPars.length){
+    // show all products as inputs
+    calcPars = prods.map(function(p){
+      return {nombre:p.nombre, unidad:p.unidad, par:p.par||0};
+    });
+  }
+ 
+  var html='<table class="prod-calc-table"><thead>'
+    +'<tr><th>Producto</th><th style="text-align:right">PAR base</th></tr>'
+    +'</thead><tbody>';
+ 
+  calcPars.forEach(function(p, i){
+    html+='<tr>'
+      +'<td>'+p.nombre+'<br><span style="font-size:10px;color:var(--text2)">'+p.unidad+'</span></td>'
+      +'<td style="text-align:right">'
+      +'<input type="number" min="0" inputmode="numeric" id="cpar-'+i+'" value="'+(p.par||'')+'" placeholder="0" '
+      +'style="width:64px;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--r2);font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);text-align:center;font-weight:700;">'
+      +'</td></tr>';
+  });
+ 
+  html+='</tbody></table>';
+  list.innerHTML=html;
+ 
+  // save on change
+  calcPars.forEach(function(p, i){
+    var inp=el('cpar-'+i);
+    if(inp){
+      inp.addEventListener('change',function(){
+        calcPars[i].par=parseFloat(this.value)||0;
+        saveCalcPars();
+      });
+    }
+  });
+}
+ 
+function saveCalcPars(){
+  try{localStorage.setItem('gcalc',JSON.stringify({pars:calcPars}));}catch(e){}
+}
+ 
+function calcularPAR(){
+  // save current par inputs first
+  calcPars.forEach(function(p,i){
+    var inp=el('cpar-'+i);
+    if(inp) p.par=parseFloat(inp.value)||0;
+  });
+  saveCalcPars();
+ 
+  var vbase=parseFloat(el('c-vbase').value)||0;
+  var vobj=parseFloat(el('c-vobj').value)||0;
+ 
+  if(!vbase||!vobj){ toast('Introduce ambas ventas'); return; }
+  if(vbase<=0||vobj<=0){ toast('Las ventas deben ser mayores que 0'); return; }
+ 
+  var conPar=calcPars.filter(function(p){return p.par>0;});
+  if(!conPar.length){ toast('Introduce el PAR de al menos un producto'); return; }
+ 
+  var factor=vobj/vbase;
+  var pctCambio=Math.round((factor-1)*100);
+  var pctTxt=pctCambio>=0?'+'+pctCambio+'%':pctCambio+'%';
+  var factorTxt=factor.toFixed(3);
+ 
+  var res='<div class="resultado-box">'
+    +'<div class="resultado-titulo">✅ Resultado del cálculo</div>'
+    +'<div class="resultado-grid">'
+    +'<div class="resultado-item"><div class="resultado-num">'+vbase.toLocaleString('es-ES')+'€</div><div class="resultado-lbl">Venta base</div></div>'
+    +'<div class="resultado-item"><div class="resultado-num">'+vobj.toLocaleString('es-ES')+'€</div><div class="resultado-lbl">Venta objetivo</div></div>'
+    +'</div>'
+    +'<div class="resultado-factor">'
+    +'Factor de ajuste: <b>×'+factorTxt+'</b> ('+pctTxt+')<br>'
+    +'PAR ideal = PAR base × '+factorTxt
+    +'</div>'
+    +'</div>'
+    +'<div class="calc-section">'
+    +'<div class="calc-title">PAR ideal por producto</div>'
+    +'<table class="prod-calc-table">'
+    +'<thead><tr><th>Producto</th><th style="text-align:center">PAR base</th><th style="text-align:right">PAR ideal</th></tr></thead>'
+    +'<tbody>'
+    +conPar.map(function(p){
+      var parIdeal=Math.round(p.par*factor);
+      var diff=parIdeal-p.par;
+      var badge=diff>0
+        ?'<span class="par-nuevo-badge">+'+diff+'</span>'
+        :diff<0
+        ?'<span class="par-igual-badge">'+diff+'</span>'
+        :'<span class="par-igual-badge">=</span>';
+      var clsIdeal=diff>0?'par-up':diff<0?'par-down':'';
+      return '<tr>'
+        +'<td>'+p.nombre+'<br><span style="font-size:10px;color:var(--text2)">'+p.unidad+'</span></td>'
+        +'<td style="text-align:center">'+p.par+'</td>'
+        +'<td><span class="'+clsIdeal+'">'+parIdeal+'</span>'+badge+'</td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table>'
+    +'</div>'
+    +'<button class="btn btn-k" id="btn-aplicar-par">Aplicar PAR ideal al inventario ▶</button>'
+    +'<div class="warn-calc" style="margin-top:8px">⚠️ Esto actualizará el PAR de todos los productos en el inventario con los valores calculados.</div>';
+ 
+  el('calc-resultado').innerHTML=res;
+  el('btn-aplicar-par').addEventListener('click',function(){
+    aplicarParIdeal(factor, conPar);
+  });
+}
+ 
+function aplicarParIdeal(factor, conPar){
+  var aplicados=0;
+  conPar.forEach(function(cp){
+    var parIdeal=Math.round(cp.par*factor);
+    prods.forEach(function(p){
+      if(p.nombre===cp.nombre){
+        p.par=parIdeal;
+        p.parAnt=parIdeal;
+        aplicados++;
+      }
+    });
+  });
+  saveP();
+  toast('PAR ideal aplicado a '+aplicados+' productos ✓');
+  el('calc-resultado').innerHTML='<div class="resultado-box" style="border-color:var(--green);background:var(--green-bg)">'
+    +'<div class="resultado-titulo" style="color:var(--green)">✓ PAR actualizado en el inventario</div>'
+    +'<div style="font-size:13px;color:var(--green)">Se ha aplicado el PAR ideal a <b>'+aplicados+' productos</b>.<br>Puedes ajustarlos manualmente en el próximo inventario.</div>'
+    +'</div>';
 }
  
 // ── INIT ──
